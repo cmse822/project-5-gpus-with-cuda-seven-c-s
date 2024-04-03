@@ -64,16 +64,18 @@ void cuda_diffusion(float* u, float *u_new, const unsigned int n){
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
   //Do the diffusion
-  if (i >= 2 && i < n - 2) {
-    u_new[i] = -c_a * (u[i-2] + u[i+2]) + c_b * (u[i-1] + u[i+1]) + c_c * u[i];
+  if (idx >= 2 && idx < n - 2) {
+    u_new[idx] = -c_a * (u[idx-2] + u[idx+2]) + c_b * (u[idx-1] + u[idx+1]) -c_c * u[idx];
   }
 
   //Apply the dirichlet boundary conditions
   //HINT: Think about which threads will have the data for the boundaries
-   if (i == 0 || i == 1) {
-    u_new[i] = -u_new[3 - i];
-  } else if (i == n - 2 || i == n - 1) {
-    u_new[i] = -u_new[n - 4 + (n - 1 - i)];
+  if (idx < NG) {
+    u_new[idx] = -u_new[NG+1-idx];
+  }
+
+  if (idx >= n-NG) {
+    u_new[idx] = -u_new[n-NG-1-(n-idx)];
   }
 }
 
@@ -81,7 +83,8 @@ void cuda_diffusion(float* u, float *u_new, const unsigned int n){
 /********************************************************************************
   Do one diffusion step, with CUDA, with shared memory
  *******************************************************************************/
-__global__ 
+ 
+ __global__ 
 void shared_diffusion(float* u, float *u_new, const unsigned int n){
 
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -93,29 +96,29 @@ void shared_diffusion(float* u, float *u_new, const unsigned int n){
   __shared__ float shared_u[BLOCK_DIM_X + 2 * NG];
 
   //Fill shared memory with the data needed from global memory
-  if (i < n) {
-    shared_u[index] = u[i];
+  if (idx < n) {
+    shared_u[index] = u[idx];
     if (threadIdx.x < NG) {
-      if (i >= NG) {
-        shared_u[index - NG] = u[i - NG];
+      if (idx >= NG) {
+        shared_u[index - NG] = u[idx - NG];
       }
-      if (i + blockDim.x < n) {
-        shared_u[index + blockDim.x] = u[i + blockDim.x];
+      if (idx + blockDim.x < n) {
+        shared_u[index + blockDim.x] = u[idx + blockDim.x];
       }
     }
   }
 
   //Do the diffusion
-  if (i >= 2 && i < n - 2) {
-    u_new[i] = -c_a * (shared_u[index - 2] + shared_u[index + 2]) + c_b * (shared_u[index - 1] + shared_u[index + 1]) + c_c * shared_u[index];
+  if (idx >= 2 && idx < n - 2) {
+    u_new[idx] = -c_a * (shared_u[index - 2] + shared_u[index + 2]) + c_b * (shared_u[index - 1] + shared_u[index + 1]) -c_c * shared_u[index];
   }
 
   //Apply the dirichlet boundary conditions
   //HINT: Think about which threads will have the data for the boundaries
-   if (i == 0 || i == 1) {
-    u_new[i] = -u_new[3 - i];
-  } else if (i == n - 2 || i == n - 1) {
-    u_new[i] = -u_new[n - 4 + (n - 1 - i)];
+   if (idx == 0 || idx == 1) {
+    u_new[idx] = -u_new[3 - idx];
+  } else if (idx == n - 2 || idx == n - 1) {
+    u_new[idx] = -u_new[n - 4 + (n - 1 - idx)];
   }
 }
 
@@ -140,9 +143,9 @@ void outputToFile(string filename, float* u, unsigned int n){
 int main(int argc, char** argv){
 
   //Number of steps to iterate
-  //const unsigned int n_steps = 10;
+  const unsigned int n_steps = 10;
   //const unsigned int n_steps = 100;
-  const unsigned int n_steps = 1000000;
+  //const unsigned int n_steps = 1000000;
 
   //Whether and how ow often to dump data
   const bool outputData = true;
@@ -167,17 +170,17 @@ int main(int argc, char** argv){
   float const_c = 5.f/2.f  * dt/(dx*dx);
 
   //Copy these the cuda constant memory
-  cudaMemcpyToSymbol(c_a, &const_a, sizeof(float));
-  cudaMemcpyToSymbol(c_b, &const_b, sizeof(float));
-  cudaMemcpyToSymbol(c_c, &const_c, sizeof(float));
+  checkCuda(cudaMemcpyToSymbol(c_a, &const_a, sizeof(float)));
+  checkCuda(cudaMemcpyToSymbol(c_b, &const_b, sizeof(float)));
+  checkCuda(cudaMemcpyToSymbol(c_c, &const_c, sizeof(float)));
 
   //iterator, for later
   int i;
 
   //Create cuda timers
 	cudaEvent_t start, stop;
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
+	checkCuda(cudaEventCreate(&start));
+	checkCuda(cudaEventCreate(&stop));
 
   //Timing variables
   float milliseconds;
@@ -255,25 +258,27 @@ int main(int argc, char** argv){
   //Allocate memory on the GPU
   float* d_u, *d_u2;
   //Allocate d_u,d_u2 on the GPU, and copy cuda_u into d_u
-  cudaMalloc(&d_u, n * sizeof(float));
-  cudaMalloc(&d_u2, n * sizeof(float));
-  cudaMemcpy(d_u, cuda_u, n * sizeof(float), cudaMemcpyHostToDevice);
+  checkCuda(cudaMalloc(&d_u, n * sizeof(float)));
+  checkCuda(cudaMalloc(&d_u2, n * sizeof(float)));
+  checkCuda(cudaMemcpy(d_u, cuda_u, n * sizeof(float), cudaMemcpyHostToDevice));
 
 	cudaEventRecord(start);//Start timing
   //Perform n_steps of diffusion
   for( i = 0 ; i < n_steps; i++){
 
-    if(outputData && i%outputPeriod == 0){
+    if(outputData && i %outputPeriod == 0){
       //Copy data off the device for writing
       sprintf(filename,"data/cuda_u%08d.dat",i);
-      cudaMemcpy(cuda_u, d_u, n * sizeof(float), cudaMemcpyDeviceToHost);
+      checkCuda(cudaMemcpy(cuda_u, d_u, n * sizeof(float), cudaMemcpyDeviceToHost));
 
       outputToFile(filename,cuda_u,n);
     }
 
     //Call the cuda_diffusion kernel
-    cuda_diffusion(d_u,d_u2,n,dx,dt);
-    // cuda_diffusion<<<gridDim, blockDim>>>(d_u, d_u2, n);
+    //cuda_diffusion(d_u,d_u2,n);
+    cuda_diffusion<<<gridDim, blockDim>>>(d_u, d_u2, n);
+    checkCuda(cudaGetLastError()); 
+
 
     //Switch the buffer with the original u
     float* tmp = d_u;
@@ -281,21 +286,22 @@ int main(int argc, char** argv){
     d_u2 = tmp;
 
   }
-	cudaEventRecord(stop);//End timing
-	
+	checkCuda(cudaEventRecord(stop));//End timing	
 
   //Copy the memory back for one last data dump
   sprintf(filename,"data/cuda_u%08d.dat",i);
-  cudaMemcpy(cuda_u, d_u, n * sizeof(float), cudaMemcpyDeviceToHost);
-  
+  checkCuda(cudaMemcpy(cuda_u, d_u, n * sizeof(float), cudaMemcpyDeviceToHost));
+
   outputToFile(filename,cuda_u,n);
 
   //Get the total time used on the GPU
-	cudaEventSynchronize(stop);
+	checkCuda(cudaEventSynchronize(stop));
 	milliseconds = 0;
-	cudaEventElapsedTime(&milliseconds, start, stop);
+	checkCuda(cudaEventElapsedTime(&milliseconds, start, stop));
 
   cout<<"Cuda Kernel took: "<<milliseconds/n_steps<<"ms per step"<<endl;
+
+  outputToFile("data/cuda_uFinal.dat",cuda_u,n);
 
 
 /********************************************************************************
@@ -305,7 +311,7 @@ int main(int argc, char** argv){
   //Allocate a copy for the GPU memory in the host's heap
   float* shared_u  = new float[n];
 
-  /*
+  
   //Initialize the cuda memory
 
   for( i = 0; i < n; i++){
@@ -331,8 +337,7 @@ int main(int argc, char** argv){
     }
 
     //Call the shared_diffusion kernel
-    shared_diffusion(d_u,d_u2,n,dx,dt);
-    //shared_diffusion<<<gridDim, blockDim>>>(d_u, d_u2, n);
+    shared_diffusion<<<gridDim, blockDim>>>(d_u, d_u2, n);
 
     //Switch the buffer with the original u
     float* tmp = d_u;
@@ -404,4 +409,7 @@ int main(int argc, char** argv){
   delete[] shared_u;
 
   //FIXME free d_u and d_2
+
+  checkCuda(cudaFree(d_u));
+  checkCuda(cudaFree(d_u2));
 }

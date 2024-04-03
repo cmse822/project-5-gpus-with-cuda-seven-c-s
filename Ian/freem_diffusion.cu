@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -7,6 +6,8 @@
 #include <cassert>
 #include "get_walltime.h"
 using namespace std;
+
+// COMPILE WITH: nvcc freem_diffusion.cu -o ./freem_p1.exe
 
 const unsigned int NG = 2;
 const unsigned int BLOCK_DIM_X = 256;

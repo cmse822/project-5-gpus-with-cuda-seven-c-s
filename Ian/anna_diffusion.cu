@@ -45,6 +45,7 @@ void host_diffusion(float* u, float *u_new, const unsigned int n,
                     + 4./3.f * u[i+1]
                     - 1./12.f* u[i+2]);
   }
+  
 
   //Apply the dirichlet boundary conditions
   u_new[0] = -u_new[NG+1];
@@ -60,21 +61,21 @@ __global__
 void cuda_diffusion(float* u, float *u_new, const unsigned int n){
 
   // global thread index for CUDA
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  int idx = blockIdx.x * blockDim.x + threadIdx.x + 2;
 
   //Do the diffusion
-  if (idx >= 2 && idx < n - 2) {
+//  if (idx >= NG && idx < n - NG) {
     u_new[idx] = -c_a * (u[idx-2] + u[idx+2]) + c_b * (u[idx-1] + u[idx+1]) -c_c * u[idx];
-  }
+//  }
 
   //Apply the dirichlet boundary conditions
   //HINT: Think about which threads will have the data for the boundaries
   if (idx < NG) {
-    u_new[idx] = -u_new[NG+1-idx];
+    u_new[(idx+1)%2] = -u_new[idx];
   }
 
   if (idx >= n-NG) {
-    u_new[idx] = -u_new[n-NG-1-(n-idx)];
+    u_new[2*(n - NG) - (idx + 1)] = -u_new[idx];
   }
 }
 

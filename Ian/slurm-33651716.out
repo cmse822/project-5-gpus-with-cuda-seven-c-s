@@ -12,7 +12,5 @@ The following have been reloaded with a version change:
   1) GCCcore/7.3.0 => GCCcore/10.3.0      3) numactl/2.0.11 => numactl/2.0.14
   2) binutils/2.30 => binutils/2.36.1
 
-IS THIS UPDATED 3:00
-Host function took: 654.007ms per step
-Cuda Kernel took: 586.948ms per step
-Shared Memory Kernel took: 616.321ms per step
+slurmstepd: error: *** JOB 33651716 ON nvl-003 CANCELLED AT 2024-04-09T11:59:27 DUE TO TIME LIMIT ***
+slurmstepd: error: *** STEP 33651716.0 ON nvl-003 CANCELLED AT 2024-04-09T11:59:27 DUE TO TIME LIMIT ***

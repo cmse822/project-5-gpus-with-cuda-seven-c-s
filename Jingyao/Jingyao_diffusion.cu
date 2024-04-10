@@ -1,11 +1,13 @@
 
 #include <iostream>
+#include <cuda_runtime.h>
 #include <fstream>
 #include <string>
 #include <stdio.h>
 #include <cmath>
 #include <cassert>
 #include "get_walltime.h"
+
 using namespace std;
 
 const unsigned int NG = 2;
@@ -201,6 +203,7 @@ int main(int argc, char** argv){
   checkCuda(cudaMemcpyToSymbol(c_a, &const_a, sizeof(float)));
   checkCuda(cudaMemcpyToSymbol(c_b, &const_b, sizeof(float)));
   checkCuda(cudaMemcpyToSymbol(c_c, &const_c, sizeof(float)));
+
   //iterator, for later
   int i;
 

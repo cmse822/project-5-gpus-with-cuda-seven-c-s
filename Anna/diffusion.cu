@@ -39,7 +39,7 @@ void host_diffusion(float* u, float *u_new, const unsigned int n,
 
   //First, do the diffusion step on the interior points
   for(int i = NG; i < n-NG;i++){
-    u_new[i] = u[i] + dt/(dx*dx) *(
+      u_new[i] = u[i] + dt/(dx*dx) *(
                     - 1./12.f* u[i-2]
                     + 4./3.f * u[i-1]
                     - 5./2.f * u[i]
@@ -61,12 +61,18 @@ __global__
 void cuda_diffusion(float* u, float *u_new, const unsigned int n){
 
   // global thread index for CUDA
-  int idx = blockIdx.x * blockDim.x + threadIdx.x + 2;
+  int i = blockIdx.x*blockDim.x + threadIdx.x + 2;
 
   //Do the diffusion
   //if (idx >= 2 && idx < n - 2) {
-  u_new[idx] = u[idx] + (-c_a * (u[idx-2] + u[idx+2])) + (c_b * (u[idx-1] + u[idx+1])) + (-c_c * u[idx]);
+  u_new[i] = u[i] + (-c_a * (u[i-2] + u[i+2])) + (c_b * (u[i-1] + u[i+1])) + (-c_c * u[i]);
   //}
+
+  // u_new[i] = u[i] + ( c_a*u[i-2]
+  //                   +c_b*u[i-1]
+  //                   +c_c*u[i]
+  //                   +c_b*u[i+1]
+  //                   +c_a*u[i+2]);
 
   //Apply the dirichlet boundary conditions
   //HINT: Think about which threads will have the data for the boundaries
@@ -78,11 +84,11 @@ void cuda_diffusion(float* u, float *u_new, const unsigned int n){
   //   u_new[idx] = -u_new[n-NG-1-(n-idx)];
   // }
 
-  if(idx < 4) 
-    u_new[(idx+1)%2] = -u_new[idx];
+  if(i < 4) 
+    u_new[(i+1)%2] = -u_new[i];
 
-  else if(idx >= n - 4)
-    u_new[2*(n - NG) - (idx + 1)] = -u_new[idx];
+  else if(i >= n - 4)
+    u_new[2*(n - NG) - (i + 1)] = -u_new[i];
 
 }
 
@@ -137,6 +143,12 @@ void shared_diffusion(float* u, float *u_new, const unsigned int n){
   u_new[gi] = s_u[si] + (-c_a * (s_u[si-2] + s_u[si+2])) + (c_b * (s_u[si-1] + s_u[si+1])) + (-c_c * s_u[si]);
   //}
 
+  // u_new[gi] = s_u[si] + ( c_a*s_u[si-2]
+  //                     + c_b*s_u[si-1]
+  //                     + c_c*s_u[si]
+  //                     + c_b*s_u[si+1]
+  //                     + c_a*s_u[si+2]);
+
   //Apply the dirichlet boundary conditions
   //HINT: Think about which threads will have the data for the boundaries
   if(gi < 2*NG)
@@ -166,17 +178,20 @@ void outputToFile(string filename, float* u, unsigned int n){
 int main(int argc, char** argv){
 
   //Number of steps to iterate
-  const unsigned int n_steps = 10;
-  //const unsigned int n_steps = 100;
+  //const unsigned int n_steps = 10;
+  const unsigned int n_steps = 100;
   //const unsigned int n_steps = 1000000;
 
   //Whether and how ow often to dump data
-  const bool outputData = true;
+  //const bool outputData = true;
+  const bool outputData = false;
   const unsigned int outputPeriod = n_steps/10;
 
   //Size of u
   const unsigned int n = (1<<11) +2*NG;
   //const unsigned int n = (1<<15) +2*NG;
+  //const unsigned int n = (1<<20) +2*NG;
+
 
   //Block and grid dimensions
   const unsigned int blockDim = BLOCK_DIM_X;
@@ -188,9 +203,9 @@ int main(int argc, char** argv){
   const float dt = 0.25*dx*dx;
 
   //Create constants for 6th order centered 2nd derivative
-  float const_a = 1.f/12.f * dt/(dx*dx);  
-  float const_b = 4.f/3.f  * dt/(dx*dx);
-  float const_c = 5.f/2.f  * dt/(dx*dx);
+  float const_a = -1./12.f * dt/(dx*dx);  
+  float const_b = 4./3.f  * dt/(dx*dx);
+  float const_c = -5./2.f  * dt/(dx*dx);
 
   //Copy these the cuda constant memory
   // checkCuda(cudaMemcpyToSymbol(c_a, &const_a, sizeof(float)));
@@ -209,8 +224,8 @@ int main(int argc, char** argv){
 
   //Create cuda timers
 	cudaEvent_t start, stop;
-	checkCuda(cudaEventCreate(&start));
-	checkCuda(cudaEventCreate(&stop));
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
 
   //Timing variables
   float milliseconds;
@@ -288,9 +303,18 @@ int main(int argc, char** argv){
   //Allocate memory on the GPU
   float* d_u, *d_u2;
   //Allocate d_u,d_u2 on the GPU, and copy cuda_u into d_u
-  checkCuda(cudaMalloc(&d_u, n * sizeof(float)));
-  checkCuda(cudaMalloc(&d_u2, n * sizeof(float)));
-  checkCuda(cudaMemcpy(d_u, cuda_u, n * sizeof(float), cudaMemcpyHostToDevice));
+  // checkCuda(cudaMalloc(&d_u, n * sizeof(float)));
+  // checkCuda(cudaMalloc(&d_u2, n * sizeof(float)));
+  // checkCuda(cudaMemcpy(d_u, cuda_u, n * sizeof(float), cudaMemcpyHostToDevice));
+
+  // Allocate the input and output buffers on the device
+  checkCuda(cudaMalloc((void**)&d_u, n*sizeof(float)));
+  checkCuda(cudaMalloc((void**)&d_u2,n*sizeof(float)));
+
+  // Copy the initial data (with filled ghost zones) to the device
+  checkCuda(cudaMemcpy(d_u, cuda_u, n*sizeof(float),
+                      cudaMemcpyHostToDevice));
+
 
 	cudaEventRecord(start);//Start timing
   //Perform n_steps of diffusion
@@ -307,7 +331,7 @@ int main(int argc, char** argv){
     //Call the cuda_diffusion kernel
     //cuda_diffusion(d_u,d_u2,n);
     cuda_diffusion<<<gridDim, blockDim>>>(d_u, d_u2, n);
-    checkCuda(cudaGetLastError()); 
+    //checkCuda(cudaGetLastError()); 
 
 
     //Switch the buffer with the original u
@@ -316,7 +340,7 @@ int main(int argc, char** argv){
     d_u2 = tmp;
 
   }
-	checkCuda(cudaEventRecord(stop));//End timing	
+	cudaEventRecord(stop);//End timing	
 
   //Copy the memory back for one last data dump
   sprintf(filename,"data/cuda_u%08d.dat",i);
@@ -325,9 +349,9 @@ int main(int argc, char** argv){
   outputToFile(filename,cuda_u,n);
 
   //Get the total time used on the GPU
-	checkCuda(cudaEventSynchronize(stop));
+	cudaEventSynchronize(stop);
 	milliseconds = 0;
-	checkCuda(cudaEventElapsedTime(&milliseconds, start, stop));
+	cudaEventElapsedTime(&milliseconds, start, stop);
 
   cout<<"Cuda Kernel took: "<<milliseconds/n_steps<<"ms per step"<<endl;
 
@@ -350,7 +374,7 @@ int main(int argc, char** argv){
   outputToFile("data/shared_uInit.dat",shared_u,n);
 
   //Copy the initial memory onto the GPU
-  cudaMemcpy(d_u, shared_u, n * sizeof(float), cudaMemcpyHostToDevice);
+  checkCuda(cudaMemcpy(d_u, shared_u, n * sizeof(float), cudaMemcpyHostToDevice));
 
 	
 	cudaEventRecord(start);//Start timing
@@ -360,7 +384,7 @@ int main(int argc, char** argv){
     if(outputData && i%outputPeriod == 0){
       //Copy data off the device for writing
       sprintf(filename,"data/shared_u%08d.dat",i);
-      cudaMemcpy(shared_u, d_u, n * sizeof(float), cudaMemcpyDeviceToHost);
+      checkCuda(cudaMemcpy(shared_u, d_u, n * sizeof(float), cudaMemcpyDeviceToHost));
 
 			
       outputToFile(filename,shared_u,n);
@@ -380,7 +404,7 @@ int main(int argc, char** argv){
 
   //Copy the memory back for one last data dump
   sprintf(filename,"data/shared_u%08d.dat",i);
-  cudaMemcpy(shared_u, d_u, n * sizeof(float), cudaMemcpyDeviceToHost);
+  checkCuda(cudaMemcpy(shared_u, d_u, n * sizeof(float), cudaMemcpyDeviceToHost));
 
   
 

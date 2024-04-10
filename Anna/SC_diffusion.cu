@@ -463,45 +463,45 @@ int main(int argc, char** argv)
     Test the cuda kernel for diffusion, with excessive memcpys
     **************************************************************************/
 
-    // //Initialize the cuda memory
-    // for( i = 0; i < n; i++)
-    // {
-    //     shared_u[i] = initial_u[i];
-    // }
+    //Initialize the cuda memory
+    for( i = 0; i < n; i++)
+    {
+        shared_u[i] = initial_u[i];
+    }
 
-    // cudaEventRecord(start);//Start timing
-    // //Perform n_steps of diffusion
-    // for( i = 0 ; i < n_steps; i++)
-    // {
-    //     //Copy the data from host to device
-    //     //FIXME copy shared_u to d_u
+    cudaEventRecord(start);//Start timing
+    //Perform n_steps of diffusion
+    for( i = 0 ; i < n_steps; i++)
+    {
+        //Copy the data from host to device
+        //FIXME copy shared_u to d_u
 
-    //     // Copy last solution data from the host back to the device
-    //     checkCuda(cudaMemcpy(d_u, shared_u, n*sizeof(float),
-    //                          cudaMemcpyHostToDevice));
+        // Copy last solution data from the host back to the device
+        checkCuda(cudaMemcpy(d_u, shared_u, n*sizeof(float),
+                             cudaMemcpyHostToDevice));
 
-    //     //Call the shared_diffusion kernel
-    //     //FIXME
+        //Call the shared_diffusion kernel
+        //FIXME
 
-    //     // Invoke the shared diffusion kernel on the GPU
-    //     shared_diffusion<<<gridDim, blockDim>>>(d_u, d_u2, n);
+        // Invoke the shared diffusion kernel on the GPU
+        shared_diffusion<<<gridDim, blockDim>>>(d_u, d_u2, n);
 
-    //     //Copy the data from host to device
-    //     //FIXME copy d_u2 to cuda_u
+        //Copy the data from host to device
+        //FIXME copy d_u2 to cuda_u
 
-    //     // Copy the solution back to the host
-    //     checkCuda(cudaMemcpy(shared_u, d_u2, n*sizeof(float),
-    //                          cudaMemcpyDeviceToHost));
-    // }
-    // cudaEventRecord(stop);//End timing
+        // Copy the solution back to the host
+        checkCuda(cudaMemcpy(shared_u, d_u2, n*sizeof(float),
+                             cudaMemcpyDeviceToHost));
+    }
+    cudaEventRecord(stop);//End timing
 
-    // //Get the total time used on the GPU
-    // cudaEventSynchronize(stop);
-    // milliseconds = 0;
-    // cudaEventElapsedTime(&milliseconds, start, stop);
+    //Get the total time used on the GPU
+    cudaEventSynchronize(stop);
+    milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
 
-    // cout << "Excessive cudaMemcpy took: " << milliseconds/n_steps 
-    //      << " ms per step" << endl;
+    cout << "Excessive cudaMemcpy took: " << milliseconds/n_steps 
+         << " ms per step" << endl;
 
     //Clean up the data
     delete[] initial_u;

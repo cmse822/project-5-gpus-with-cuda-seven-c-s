@@ -1,6 +1,6 @@
 #!/bin/bash
 ########## Define Resources Needed with SBATCH Lines ##########
-#SBATCH --time=00:02:00             # limit of wall clock time - how long the job will run (same as -t)
+#SBATCH --time=00:20:00             # limit of wall clock time - how long the job will run (same as -t)
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1           # number of CPUs (or cores) per task (same as -c)
@@ -14,4 +14,4 @@ module purge
 module load gcc/7.3.0-2.30 OpenMPI HDF5
 module load NVHPC
 
-./a.out
+./SC_diffusion

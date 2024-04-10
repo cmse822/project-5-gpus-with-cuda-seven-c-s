@@ -61,22 +61,29 @@ __global__
 void cuda_diffusion(float* u, float *u_new, const unsigned int n){
 
   // global thread index for CUDA
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  int idx = blockIdx.x * blockDim.x + threadIdx.x + 2;
 
   //Do the diffusion
-  if (idx >= 2 && idx < n - 2) {
-    u_new[idx] = -c_a * (u[idx-2] + u[idx+2]) + c_b * (u[idx-1] + u[idx+1]) -c_c * u[idx];
-  }
+  //if (idx >= 2 && idx < n - 2) {
+  u_new[idx] = u[idx] + (-c_a * (u[idx-2] + u[idx+2])) + (c_b * (u[idx-1] + u[idx+1])) + (-c_c * u[idx]);
+  //}
 
   //Apply the dirichlet boundary conditions
   //HINT: Think about which threads will have the data for the boundaries
-  if (idx < NG) {
-    u_new[idx] = -u_new[NG+1-idx];
-  }
+  // if (idx < NG) {
+  //   u_new[idx] = -u_new[NG+1-idx];
+  // }
 
-  if (idx >= n-NG) {
-    u_new[idx] = -u_new[n-NG-1-(n-idx)];
-  }
+  // if (idx >= n-NG) {
+  //   u_new[idx] = -u_new[n-NG-1-(n-idx)];
+  // }
+
+  if(idx < 4) 
+    u_new[(idx+1)%2] = -u_new[idx];
+
+  else if(idx >= n - 4)
+    u_new[2*(n - NG) - (idx + 1)] = -u_new[idx];
+
 }
 
 
@@ -87,39 +94,55 @@ void cuda_diffusion(float* u, float *u_new, const unsigned int n){
  __global__ 
 void shared_diffusion(float* u, float *u_new, const unsigned int n){
 
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
-  int index = threadIdx.x + NG;
+  //int idx = blockIdx.x * blockDim.x + threadIdx.x +2;
+  //int index = threadIdx.x + NG;
+
+  __shared__ float s_u[BLOCK_DIM_X + 4];
 
 
+  // Width of this block
+  int nx = blockDim.x;
 
-  //Allocate the shared memory
-  __shared__ float shared_u[BLOCK_DIM_X + 2 * NG];
+  // Local index for shared memory
+  int si = threadIdx.x + 2;
+
+  // Global index
+  int gi = blockIdx.x*nx + si;
 
   //Fill shared memory with the data needed from global memory
-  if (idx < n) {
-    shared_u[index] = u[idx];
-    if (threadIdx.x < NG) {
-      if (idx >= NG) {
-        shared_u[index - NG] = u[idx - NG];
-      }
-      if (idx + blockDim.x < n) {
-        shared_u[index + blockDim.x] = u[idx + blockDim.x];
-      }
-    }
-  }
+  // if (idx < n) {
+  //   shared_u[index] = u[idx];
+  //   if (threadIdx.x < NG) {
+  //     if (idx >= NG) {
+  //       shared_u[index - NG] = u[idx - NG];
+  //     }
+  //     if (idx + blockDim.x < n) {
+  //       shared_u[index + blockDim.x] = u[idx + blockDim.x];
+  //     }
+  //   }
+  // }
+
+  s_u[si] = u[gi];
+
+  if(si < 2*NG)
+    s_u[si - NG] = u[gi - NG];
+  // Same for right two ghost cells
+  else if(si >= nx - 2*NG)
+    s_u[si + NG] = u[gi + NG];
+
+  __syncthreads();
 
   //Do the diffusion
-  if (idx >= 2 && idx < n - 2) {
-    u_new[idx] = -c_a * (shared_u[index - 2] + shared_u[index + 2]) + c_b * (shared_u[index - 1] + shared_u[index + 1]) -c_c * shared_u[index];
-  }
+  //if (idx >= 2 && idx < n - 2) {
+  u_new[gi] = s_u[si] + (-c_a * (s_u[si-2] + s_u[si+2])) + (c_b * (s_u[si-1] + s_u[si+1])) + (-c_c * s_u[si]);
+  //}
 
   //Apply the dirichlet boundary conditions
   //HINT: Think about which threads will have the data for the boundaries
-   if (idx == 0 || idx == 1) {
-    u_new[idx] = -u_new[3 - idx];
-  } else if (idx == n - 2 || idx == n - 1) {
-    u_new[idx] = -u_new[n - 4 + (n - 1 - idx)];
-  }
+  if(gi < 2*NG)
+    u_new[(gi + 1)%2] = -u_new[gi];
+  if(gi >= n - 2*NG)
+    u_new[2*(n - NG)-(gi + 1)] = -u_new[gi];
 }
 
 /********************************************************************************
@@ -170,9 +193,16 @@ int main(int argc, char** argv){
   float const_c = 5.f/2.f  * dt/(dx*dx);
 
   //Copy these the cuda constant memory
-  checkCuda(cudaMemcpyToSymbol(c_a, &const_a, sizeof(float)));
-  checkCuda(cudaMemcpyToSymbol(c_b, &const_b, sizeof(float)));
-  checkCuda(cudaMemcpyToSymbol(c_c, &const_c, sizeof(float)));
+  // checkCuda(cudaMemcpyToSymbol(c_a, &const_a, sizeof(float)));
+  // checkCuda(cudaMemcpyToSymbol(c_b, &const_b, sizeof(float)));
+  // checkCuda(cudaMemcpyToSymbol(c_c, &const_c, sizeof(float)));
+
+  checkCuda(cudaMemcpyToSymbol(c_a, &const_a, sizeof(float),
+                                 0, cudaMemcpyHostToDevice));
+  checkCuda(cudaMemcpyToSymbol(c_b, &const_b, sizeof(float),
+                                 0, cudaMemcpyHostToDevice));
+  checkCuda(cudaMemcpyToSymbol(c_c, &const_c, sizeof(float),
+                                 0, cudaMemcpyHostToDevice));
 
   //iterator, for later
   int i;

@@ -14,4 +14,4 @@ module purge
 module load gcc/7.3.0-2.30 OpenMPI HDF5
 module load NVHPC
 
-./SC_diffusion
+./diffusion

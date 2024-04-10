@@ -50,4 +50,4 @@ To avoid this slow down, we might try to reduce the amount of data movement occu
 that multiple blocks may run on a single multiprocessor simultaneously, sharing
 the same shared memory.
 
-We do see a slow down as the block dimension increases. **add more**
+We do see a slow down as the block dimension increases. While multiple blocks may run on a single multiprocessor simultaneously, they share the same shared memory. Therefore, this leads to increased synchronization time. All of the threads in each block are trying to access the shared memory which is why this slows down. 

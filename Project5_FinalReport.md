@@ -2,9 +2,11 @@
 
 Please note that the final code is called Project5_Diffusion_Code.cu.
 
-This is run using `nvcc diffusion.cu -DDEBUG -o diffusion` and the sbatch submission file `sbatch project5_slurm.sb`. 
+This is run using `nvcc Project5_Diffusion_Code.cu -DDEBUG -o diffusion` and the sbatch submission file `sbatch project5_slurm.sb`. 
 
 You need to also run `module load NVHPC/21.9-GCCcore-10.3.0-CUDA-11.4`
+
+Any of the slurm files are located in folder called Anna.
 
 
 1. Report your timings for the host, naive CUDA kernel, shared memory CUDA kernel,
